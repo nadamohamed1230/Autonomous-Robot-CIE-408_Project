@@ -1,0 +1,10 @@
+#ifndef ULTRASONIC_CONFIG_H
+#define ULTRASONIC_CONFIG_H
+
+#include "../../MCAL/GPIO/GPIO_interface.h"
+
+#define ULTRASONIC_PORT      GPIO_PORTB
+#define ULTRASONIC_TRIG_PIN  GPIO_PIN1
+#define ULTRASONIC_ECHO_PIN  GPIO_PIN2
+
+#endif
