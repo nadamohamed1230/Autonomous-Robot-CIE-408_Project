@@ -12,7 +12,7 @@
  */
 
 #ifndef _XTAL_FREQ
-    #define _XTAL_FREQ 16000000UL   /* Default: 16 MHz - change to match your hardware */
+    #define _XTAL_FREQ 20000000UL   /* Default: 20 MHz - change to match your hardware */
 #endif
 
 #include <xc.h>

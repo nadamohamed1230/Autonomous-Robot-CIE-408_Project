@@ -1,11 +1,7 @@
 /*
- * Ultrasonic.c - MPLAB XC8 Compatible
- *
- * KEY CHANGES:
- * 1. Manual Timer1 register definitions replaced by XC8's <xc.h> names
- *    (T1CON, TMR1H, TMR1L).
- * 2. mikroC's Delay_us() replaced by the Delay_us() macro from System.h
- *    which wraps XC8's __delay_us().
+ * Ultrasonic.c — Non-Blocking Interrupt-Driven Driver
+ * Sensors: Front (RB5), Back (RB6), Right (RB7)
+ * Triggers: Front (RA0), Back (RA1), Right (RA2)
  */
 
 #include <xc.h>
@@ -14,53 +10,125 @@
 #include "../../MCAL/GPIO/GPIO_interface.h"
 #include "../../SERVICES/System.h"
 
+/* ── Live distance variables ─────────────────────────────────────────────── */
+volatile u16 Dist_Front = 0;
+volatile u16 Dist_Back  = 0;
+volatile u16 Dist_Right = 0;
+
+/* ── Internal state ──────────────────────────────────────────────────────── */
+static volatile u16 t_start_F           = 0;
+static volatile u16 t_start_B           = 0;
+static volatile u16 t_start_R           = 0;
+static volatile u8  last_portb_state    = 0;
+static volatile u8  current_sensor_turn = 0;  /* 0=Front, 1=Back, 2=Right */
+
+/* ============================================================================
+   INIT
+   ============================================================================ */
 void Ultrasonic_Init(void)
 {
-    GPIO_SetPinDirection(ULTRASONIC_PORT, ULTRASONIC_TRIG_PIN, GPIO_OUTPUT);
-    GPIO_SetPinDirection(ULTRASONIC_PORT, ULTRASONIC_ECHO_PIN, GPIO_INPUT);
-    GPIO_SetPinValue(ULTRASONIC_PORT, ULTRASONIC_TRIG_PIN, GPIO_LOW);
+    /* Trigger pins as output, pulled LOW */
+    GPIO_SetPinDirection(TRIG_PORT, TRIG_FRONT_PIN, GPIO_OUTPUT);
+    GPIO_SetPinDirection(TRIG_PORT, TRIG_BACK_PIN,  GPIO_OUTPUT);
+    GPIO_SetPinDirection(TRIG_PORT, TRIG_RIGHT_PIN, GPIO_OUTPUT);
 
-    /* Timer1: 1:4 prescaler, Timer1 OFF
-     * At Fosc=16MHz: instruction clock=4MHz (0.25us/tick)
-     * With 1:4 prescaler: 1 tick = 1.0 us  (ideal for distance timing) */
-    T1CON = 0x20;
-}
+    GPIO_SetPinValue(TRIG_PORT, TRIG_FRONT_PIN, GPIO_LOW);
+    GPIO_SetPinValue(TRIG_PORT, TRIG_BACK_PIN,  GPIO_LOW);
+    GPIO_SetPinValue(TRIG_PORT, TRIG_RIGHT_PIN, GPIO_LOW);
 
-u16 Ultrasonic_GetDistance(void)
-{
-    u16 time_us    = 0;
-    u16 timeout    = 0;
+    /* Echo pins as input */
+    GPIO_SetPinDirection(ECHO_PORT, ECHO_FRONT_PIN, GPIO_INPUT);
+    GPIO_SetPinDirection(ECHO_PORT, ECHO_BACK_PIN,  GPIO_INPUT);
+    GPIO_SetPinDirection(ECHO_PORT, ECHO_RIGHT_PIN, GPIO_INPUT);
 
-    /* Send 10 us trigger pulse */
-    GPIO_SetPinValue(ULTRASONIC_PORT, ULTRASONIC_TRIG_PIN, GPIO_HIGH);
-    Delay_us(10);
-    GPIO_SetPinValue(ULTRASONIC_PORT, ULTRASONIC_TRIG_PIN, GPIO_LOW);
-
-    /* Wait for Echo HIGH (start of return pulse) */
-    while (GPIO_GetPinValue(ULTRASONIC_PORT, ULTRASONIC_ECHO_PIN) == GPIO_LOW)
-    {
-        timeout++;
-        if (timeout > 20000u) return 0;   /* Sensor not connected / no object */
-    }
-
-    /* Reset and start Timer1 */
+    /* Timer1: 1 tick = 1 µs @ 16 MHz, prescaler 1:4 */
     TMR1H = 0;
     TMR1L = 0;
-    T1CON |= 0x01;   /* TMR1ON = 1 */
+    T1CON = 0x21;
 
-    /* Wait for Echo LOW (end of return pulse) */
-    while (GPIO_GetPinValue(ULTRASONIC_PORT, ULTRASONIC_ECHO_PIN) == GPIO_HIGH)
+    /* Enable PORTB interrupt-on-change */
+    last_portb_state  = PORTB;
+    INTCONbits.RBIE   = 1;
+    INTCONbits.RBIF   = 0;
+}
+
+/* ============================================================================
+   ROUND-ROBIN TRIGGER
+   Fires ONE sensor per call: Front → Back → Right → Front …
+   Called every 96 ms from the telemetry block in main.c.
+   Each sensor refreshes every 288 ms — no acoustic collisions.
+   ============================================================================ */
+void Ultrasonic_Trigger_RoundRobin(void)
+{
+    if (current_sensor_turn == 0)
     {
-        if (TMR1H > 250u) break;   /* Overflow guard (~65 ms) */
+        GPIO_SetPinValue(TRIG_PORT, TRIG_FRONT_PIN, GPIO_HIGH);
+        Delay_us(10);
+        GPIO_SetPinValue(TRIG_PORT, TRIG_FRONT_PIN, GPIO_LOW);
+        current_sensor_turn = 1;
+    }
+    else if (current_sensor_turn == 1)
+    {
+        GPIO_SetPinValue(TRIG_PORT, TRIG_BACK_PIN, GPIO_HIGH);
+        Delay_us(10);
+        GPIO_SetPinValue(TRIG_PORT, TRIG_BACK_PIN,  GPIO_LOW);
+        current_sensor_turn = 2;
+    }
+    else
+    {
+        GPIO_SetPinValue(TRIG_PORT, TRIG_RIGHT_PIN, GPIO_HIGH);
+        Delay_us(10);
+        GPIO_SetPinValue(TRIG_PORT, TRIG_RIGHT_PIN, GPIO_LOW);
+        current_sensor_turn = 0;
+    }
+}
+
+/* ============================================================================
+   IOC ISR
+   Accepts the PORTB snapshot already read in main.c ISR.
+   No second PORTB read — mismatch latch stays intact for the encoder.
+   u8 cast removed — Dist_* are u16 so distances > 255 cm work correctly.
+   RBIF cleared here (inside the driver) for safety and encapsulation.
+   ============================================================================ */
+void Ultrasonic_IOC_ISR(u8 current_portb)
+{
+    u16 current_time = ((u16)TMR1H << 8) | TMR1L;
+    u8  changed_pins = current_portb ^ last_portb_state;
+
+    /* Front — RB5 */
+    if (changed_pins & (1U << 5))
+    {
+        if (current_portb & (1U << 5))
+            t_start_F = current_time;
+        else
+            Dist_Front = (current_time - t_start_F) / 58U;
     }
 
-    /* Stop Timer1 */
-    T1CON &= (u8)~0x01;
+    /* Back — RB6 */
+    if (changed_pins & (1U << 6))
+    {
+        if (current_portb & (1U << 6))
+            t_start_B = current_time;
+        else
+            Dist_Back = (current_time - t_start_B) / 58U;
+    }
 
-    /* Read 16-bit elapsed time in microseconds */
-    time_us = ((u16)TMR1H << 8) | TMR1L;
+    /* Right — RB7 */
+    if (changed_pins & (1U << 7))
+    {
+        if (current_portb & (1U << 7))
+            t_start_R = current_time;
+        else
+            Dist_Right = (current_time - t_start_R) / 58U;
+    }
 
-    /* Distance (cm) = time_us / 58
-     * (Speed of sound ~343 m/s; round-trip halved gives /58 us/cm) */
-    return (u16)(time_us / 58u);
+    last_portb_state  = current_portb;
+    INTCONbits.RBIF   = 0;   /* Clear inside driver — safe even if called outside ISR */
 }
+
+/* ============================================================================
+   GETTERS
+   ============================================================================ */
+u16 Ultrasonic_GetDistance(void)     { return Dist_Front; }
+u16 Ultrasonic_GetBackDistance(void) { return Dist_Back;  }
+u16 Ultrasonic_GetRightDistance(void){ return Dist_Right; }

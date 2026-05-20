@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Autonomous Car — Mission Control</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f0f4f8;--surface:#fff;--surface2:#f7f9fc;
+    --border:#e2e8f0;--border2:#cbd5e1;
+    --blue:#2563eb;--blue-light:#eff6ff;--blue-mid:#bfdbfe;
+    --green:#16a34a;--green-light:#f0fdf4;
+    --amber:#d97706;--amber-light:#fffbeb;
+    --red:#dc2626;--red-light:#fef2f2;
+    --text:#0f172a;--text-2:#475569;--text-3:#94a3b8;
+    --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;
+    --radius:12px;--shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  }
+  body.dark{
+    --bg:#0f172a;--surface:#1e293b;--surface2:#273549;
+    --border:#334155;--border2:#475569;
+    --blue-light:#1e3a5f;--blue-mid:#1e40af;
+    --green-light:#14532d;--amber-light:#451a03;--red-light:#450a0a;
+    --text:#f1f5f9;--text-2:#94a3b8;--text-3:#475569;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;transition:background .3s,color .3s;}
+
+  /* HEADER */
+  .theme-toggle{display:flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 5px;}
+  .theme-option{padding:4px 9px;border-radius:14px;font-size:12px;font-weight:500;color:var(--text-3);cursor:pointer;transition:all .2s;user-select:none;}
+  .theme-option.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12);}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 14px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:var(--shadow);}
+  .logo{display:flex;align-items:center;gap:9px;}
+  .logo-icon{width:32px;height:32px;background:var(--blue);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .logo-icon svg{width:17px;height:17px;fill:white;}
+  .logo-name{font-size:14px;font-weight:700;}
+  .header-right{display:flex;align-items:center;gap:8px;}
+  .conn-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;background:var(--surface2);border:1px solid var(--border);font-size:11px;font-weight:500;color:var(--text-2);}
+  .conn-label{display:none;}
+  @media(min-width:500px){.conn-label{display:inline;}}
+  .conn-dot{width:7px;height:7px;border-radius:50%;background:var(--red);animation:blink 1s ease-in-out infinite;flex-shrink:0;}
+  .conn-dot.live{background:var(--green);animation:none;box-shadow:0 0 0 3px rgba(22,163,74,.15);}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+  .clock{font-family:var(--mono);font-size:12px;color:var(--text-2);display:none;}
+  @media(min-width:600px){.clock{display:block;}}
+
+  /* STATUS */
+  .status-bar{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:10px 12px 0;}
+  @media(min-width:600px){.status-bar{grid-template-columns:repeat(4,1fr);}}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:11px 12px;box-shadow:var(--shadow);display:flex;align-items:center;gap:10px;}
+  .stat-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+  .stat-icon.blue{background:var(--blue-light);}
+  .stat-icon.green{background:var(--green-light);}
+  .stat-icon.amber{background:var(--amber-light);}
+  .stat-label{font-size:10px;font-weight:500;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;}
+  .stat-value{font-size:16px;font-weight:700;}
+
+  /* LAYOUT */
+  .main{display:flex;flex-direction:column;gap:10px;padding:10px 12px 24px;}
+  @media(min-width:860px){.main{display:grid;grid-template-columns:1fr 370px;gap:12px;padding:12px 16px 24px;}}
+  .left-col,.right-col{display:flex;flex-direction:column;gap:10px;}
+
+  /* CARDS */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
+  .card-head{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .card-head.can-collapse{cursor:pointer;user-select:none;}
+  .card-title{font-size:11px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.5px;}
+  .chevron{font-size:12px;color:var(--text-3);transition:transform .22s;margin-left:6px;display:inline-block;}
+  .card.collapsed .chevron{transform:rotate(-90deg);}
+  .card.collapsed .card-body,.card.collapsed .log-scroll{display:none;}
+  .badge{font-size:10px;font-weight:500;padding:2px 8px;border-radius:6px;background:var(--surface2);color:var(--text-3);border:1px solid var(--border);font-family:var(--mono);}
+  .badge.live{background:var(--green-light);color:var(--green);border-color:#bbf7d0;}
+  .card-body{padding:14px;}
+
+  /* SLAM */
+  #slamCanvas{width:100%;height:210px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;display:block;}
+  @media(min-width:600px){#slamCanvas{height:290px;}}
+
+  /* SENSORS */
+  .sensor-row{display:grid;grid-template-columns:1fr 1.6fr;gap:10px;}
+  .dist-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
+  .dist-box{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 8px;transition:border-color .3s,background .3s;}
+  .dist-dir{font-size:10px;font-weight:600;color:var(--text-3);margin-bottom:3px;}
+  .dist-val{font-size:20px;font-weight:700;font-family:var(--mono);color:var(--text);}
+  .dist-box.close{border-color:#fecaca;background:var(--red-light);}
+  .dist-val.close{color:var(--red);}
+
+  /* CONTROLS */
+  .mode-row{display:flex;gap:7px;margin-bottom:14px;}
+  .mode-btn{flex:1;padding:12px 4px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-2);font-weight:600;font-size:12px;cursor:pointer;transition:all .14s;touch-action:manipulation;}
+  .mode-btn.active{background:var(--blue);color:white;border-color:var(--blue);}
+  .mode-btn:active{transform:scale(.95);}
+
+  /* DPAD */
+  .dpad-wrap{display:flex;justify-content:center;margin-bottom:16px;}
+  .dpad{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:8px;width:min(250px,74vw);}
+  .dpad-btn{aspect-ratio:1;border-radius:13px;border:1.5px solid var(--border);background:var(--surface2);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;touch-action:manipulation;transition:transform .1s,background .1s,border-color .1s;}
+  .dpad-btn:active,.dpad-btn.pressed{background:var(--blue);color:white;border-color:var(--blue);transform:scale(.90);}
+  .dpad-stop{background:var(--red-light);color:var(--red);font-size:11px;font-weight:700;border-color:#fecaca;}
+  .dpad-stop:active,.dpad-stop.pressed{background:var(--red);color:white;border-color:var(--red);}
+
+  /* SPEED */
+  .speed-head{display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;font-weight:500;}
+  input[type=range]{width:100%;height:6px;background:var(--border);border-radius:99px;-webkit-appearance:none;appearance:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;background:var(--blue);border-radius:50%;cursor:pointer;border:2px solid white;box-shadow:0 1px 4px rgba(37,99,235,.4);}
+
+  /* VOICE */
+  .mic-btn-wrap{display:flex;flex-direction:column;align-items:center;gap:11px;padding:6px 0 4px;}
+  .mic-btn{width:66px;height:66px;border-radius:50%;border:none;background:var(--blue);color:white;font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(37,99,235,.35);touch-action:manipulation;}
+  .mic-btn.listening{background:var(--red);animation:mic-pulse 1s ease-in-out infinite;}
+  @keyframes mic-pulse{0%,100%{box-shadow:0 4px 12px rgba(220,38,38,.4),0 0 0 0 rgba(220,38,38,.3);}50%{box-shadow:0 4px 12px rgba(220,38,38,.4),0 0 0 12px rgba(220,38,38,0);}}
+  .mic-hint{font-size:11px;color:var(--text-3);font-weight:500;text-align:center;}
+  .voice-transcript-box{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;margin-top:4px;min-height:44px;display:flex;flex-direction:column;gap:5px;}
+  .voice-transcript-label{font-size:10px;font-weight:600;color:var(--text-3);text-transform:uppercase;}
+  .voice-transcript-text{font-size:13px;color:var(--text);font-style:italic;}
+  .voice-result-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+  .voice-result-label{font-size:11px;color:var(--text-3);font-weight:500;}
+  .voice-result-cmd{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--blue);padding:3px 10px;background:var(--blue-light);border-radius:6px;border:1px solid var(--blue-mid);}
+  .voice-response-box{background:var(--green-light);border:1px solid #bbf7d0;border-radius:10px;padding:10px 13px;margin-top:8px;}
+  body.dark .voice-response-box{background:#14532d;border-color:#166534;}
+  .query-btn{padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text-2);font-size:12px;font-weight:500;cursor:pointer;touch-action:manipulation;}
+
+  /* LOG */
+  .log-scroll{height:160px;overflow-y:auto;padding:10px 14px;}
+  .log-scroll::-webkit-scrollbar{width:3px;}
+  .log-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
+  .log-entry{display:flex;gap:10px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;}
+  .log-entry:last-child{border-bottom:none;}
+  .log-t{color:var(--text-3);font-family:var(--mono);flex-shrink:0;}
+  .log-m{color:var(--text-2);}
+  .log-m.ok{color:var(--green);font-weight:500;}
+  .log-m.warn{color:var(--amber);font-weight:500;}
+  .log-m.danger{color:var(--red);font-weight:600;}
+  .log-count{font-family:var(--mono);font-size:11px;color:var(--text-3);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.5l7.5 3.75L12 12 4.5 8.25 12 4.5zM4 9.5l7 3.5v6.5L4 16V9.5zm9 10V13l7-3.5V16l-7 3.5z"/></svg></div>
+    <div class="logo-name">Mission Control</div>
+  </div>
+  <div class="header-right">
+    <div class="theme-toggle">
+      <div class="theme-option active" id="optLight" onclick="setTheme('light')">☀️ Light</div>
+      <div class="theme-option" id="optDark" onclick="setTheme('dark')">🌙 Dark</div>
+    </div>
+    <div class="conn-pill">
+      <div class="conn-dot" id="connDot"></div><span class="conn-label" id="connLabel">Connecting…</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<div class="status-bar">
+  <div class="stat-card"><div class="stat-icon green">🛡️</div><div><div class="stat-label">Status</div><div class="stat-value" style="color:var(--green)" id="statStatus">—</div></div></div>
+  <div class="stat-card"><div class="stat-icon blue">🤖</div><div><div class="stat-label">Sensors</div><div class="stat-value" style="color:var(--blue)" id="statHealth">Healthy</div></div></div>
+  <div class="stat-card"><div class="stat-icon amber">🧭</div><div><div class="stat-label">Heading</div><div class="stat-value" id="statHeading">0°</div></div></div>
+  <div class="stat-card"><div class="stat-icon blue">⚡</div><div><div class="stat-label">Speed</div><div class="stat-value" style="color:var(--blue)" id="statSpeed">0%</div></div></div>
+</div>
+
+<div class="main">
+  <div class="left-col">
+
+    <div class="card collapsed" id="slamCard">
+      <div class="card-head can-collapse" onclick="toggleCard('slamCard')">
+        <div class="card-title">🗺️ Live 2D SLAM Map</div>
+        <div style="display:flex;align-items:center;">
+          <span class="badge" style="background:var(--blue-light);color:var(--blue);border-color:var(--blue-mid);">Dead Reckoning</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <canvas id="slamCanvas"></canvas>
+        <div style="display:flex;justify-content:center;gap:15px;margin-top:10px;font-size:11px;color:var(--text-2);">
+          <div><span style="display:inline-block;width:10px;height:2px;background:var(--blue);margin-bottom:3px;vertical-align:middle;"></span> Car Path</div>
+          <div><span style="display:inline-block;width:6px;height:6px;background:var(--red);border-radius:50%;vertical-align:middle;"></span> Walls</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sensor-row">
+      <div class="card">
+        <div class="card-head"><div class="card-title">🔄 Encoders</div></div>
+        <div class="card-body" style="padding:11px 12px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <div style="font-size:11px;color:var(--text-3);">Left</div><div id="leftRpmVal" style="font-family:var(--mono);font-weight:700;">0</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <div style="font-size:11px;color:var(--text-3);">Right</div><div id="rightRpmVal" style="font-family:var(--mono);font-weight:700;">0</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-title">📡 Ultrasonics</div></div>
+        <div class="card-body" style="padding:10px;">
+          <div class="dist-grid">
+            <div class="dist-box" id="boxFront"><div class="dist-dir">▲ Front</div><div class="dist-val" id="frontVal">0</div></div>
+            <div class="dist-box" id="boxBack"><div class="dist-dir">▼ Back</div><div class="dist-val" id="backVal">0</div></div>
+            <div class="dist-box" id="boxRight"><div class="dist-dir">▶ Right</div><div class="dist-val" id="rightVal">0</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="right-col">
+
+    <div class="card">
+      <div class="card-head"><div class="card-title">🎮 Controls</div></div>
+      <div class="card-body" style="padding:13px 13px 15px;">
+        <div class="mode-row">
+          <button class="mode-btn active" onclick="setMode('Manual')">Manual</button>
+          <button class="mode-btn" onclick="setMode('Autonomous')">Autonomous</button>
+          <button class="mode-btn" onclick="setDirection('Park')">🅿️ Park</button>
+        </div>
+        <div class="dpad-wrap">
+          <div class="dpad">
+            <div style="visibility:hidden"></div>
+            <button class="dpad-btn" onclick="setDirection('Forward')">▲</button>
+            <div style="visibility:hidden"></div>
+            <button class="dpad-btn" onclick="setDirection('Left')">◀</button>
+            <button class="dpad-btn dpad-stop" onclick="setDirection('Stop')">STOP</button>
+            <button class="dpad-btn" onclick="setDirection('Right')">▶</button>
+            <div style="visibility:hidden"></div>
+            <button class="dpad-btn" onclick="setDirection('Reverse')">▼</button>
+            <div style="visibility:hidden"></div>
+          </div>
+        </div>
+        <div class="speed-head"><span>Max Target Speed</span><span id="speedLabel" style="color:var(--blue);font-weight:700;">50%</span></div>
+        <input type="range" min="0" max="100" value="50" oninput="setSpeed(this.value)">
+      </div>
+    </div>
+
+    <div class="card" id="voiceCard">
+      <div class="card-head can-collapse" onclick="toggleCard('voiceCard')">
+        <div class="card-title">🎙️ Voice Control</div>
+        <div style="display:flex;align-items:center;">
+          <span class="badge live" id="voiceStatusBadge">Ready</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="card-body" id="voiceCardBody" style="padding:12px 13px;">
+        <div class="mic-btn-wrap">
+          <button class="mic-btn" id="micBtn" onclick="toggleListening()">🎙️</button>
+          <div class="mic-hint" id="micHint">Tap to speak a command</div>
+        </div>
+        <div class="voice-transcript-box">
+          <div class="voice-transcript-label">You said</div>
+          <div class="voice-transcript-text" id="voiceTranscript">—</div>
+        </div>
+        <div class="voice-result-row">
+          <div class="voice-result-label">Command detected</div>
+          <div class="voice-result-cmd" id="voiceCommand">—</div>
+        </div>
+        <div class="voice-response-box" id="voiceResponseBox" style="display:none">
+          <div class="voice-transcript-label" style="display:flex;align-items:center;gap:6px;">
+            <span id="speakingDot" style="width:7px;height:7px;border-radius:50%;background:var(--green);display:none;animation:blink .8s ease-in-out infinite"></span>Car says
+          </div>
+          <div class="voice-transcript-text" id="voiceResponse" style="color:var(--green);font-style:normal;font-weight:500">—</div>
+        </div>
+        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
+          <div class="voice-transcript-label" style="margin-bottom:8px;">Ask the car</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <button class="query-btn" onclick="askCar('FrontDistance','how far ahead?')">📡 Distance</button>
+            <button class="query-btn" onclick="askCar('Battery','battery status?')">🔋 Battery</button>
+            <button class="query-btn" onclick="askCar('Speed','current speed?')">⚡ Speed</button>
+            <button class="query-btn" onclick="askCar('Status','vehicle status?')">🛡️ Status</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="logCard">
+      <div class="card-head can-collapse" onclick="toggleCard('logCard')">
+        <div class="card-title">📋 Event Log</div>
+        <div style="display:flex;align-items:center;">
+          <span class="log-count" id="logCount">0 events</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="log-scroll" id="logBody">
+        <div class="log-entry"><span class="log-t">--:--:--</span><span class="log-m">Initializing dashboard…</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDHSCL-j9jDTp1BsbiaDCG6M7AHf0ingkE",
+    authDomain: "autonomous-car-869bf.firebaseapp.com",
+    databaseURL: "https://autonomous-car-869bf-default-rtdb.firebaseio.com",
+    projectId: "autonomous-car-869bf",
+    storageBucket: "autonomous-car-869bf.firebasestorage.app",
+    messagingSenderId: "306741646721",
+    appId: "1:306741646721:web:36a21c8db9cc952326c480"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB',{hour12:false}),1000);
+  setInterval(()=>set(ref(db,'controls/app_heartbeat'),Date.now()),1000);
+
+  window.toggleCard=id=>document.getElementById(id).classList.toggle('collapsed');
+
+  let logCount=0;
+  function addLog(msg,type=''){
+    logCount++;
+    document.getElementById('logCount').textContent=logCount+' events';
+    const t=new Date().toLocaleTimeString('en-GB',{hour12:false});
+    const el=document.createElement('div');el.className='log-entry';
+    el.innerHTML=`<span class="log-t">${t}</span><span class="log-m ${type}">${msg}</span>`;
+    const body=document.getElementById('logBody');body.appendChild(el);body.scrollTop=body.scrollHeight;
+  }
+
+  const canvas=document.getElementById('slamCanvas');
+  const ctx=canvas.getContext('2d');
+  function resizeCanvas(){canvas.width=canvas.offsetWidth*(window.devicePixelRatio||1);canvas.height=canvas.offsetHeight*(window.devicePixelRatio||1);}
+  resizeCanvas();window.addEventListener('resize',resizeCanvas);
+
+  let carPath=[],wallPoints=[];
+  function drawSLAM(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle='#e2e8f0';ctx.lineWidth=1;
+    for(let i=0;i<canvas.width;i+=40){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,canvas.height);ctx.stroke();}
+    for(let i=0;i<canvas.height;i+=40){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(canvas.width,i);ctx.stroke();}
+    if(!carPath.length)return;
+    const cp=carPath[carPath.length-1];
+    const ox=canvas.width/2-cp.x*2,oy=canvas.height/2+cp.y*2;
+    ctx.fillStyle='#dc2626';
+    wallPoints.forEach(pt=>{ctx.beginPath();ctx.arc(pt.x*2+ox,-pt.y*2+oy,3,0,Math.PI*2);ctx.fill();});
+    ctx.strokeStyle='#2563eb';ctx.lineWidth=4;ctx.lineJoin='round';ctx.beginPath();
+    carPath.forEach((pt,i)=>{const px=pt.x*2+ox,py=-pt.y*2+oy;i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);});
+    ctx.stroke();
+    ctx.fillStyle='#1e40af';ctx.beginPath();ctx.arc(canvas.width/2,canvas.height/2,8,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#10b981';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(canvas.width/2,canvas.height/2);
+    ctx.lineTo(canvas.width/2+Math.cos(cp.theta)*20,canvas.height/2-Math.sin(cp.theta)*20);ctx.stroke();
+  }
+
+  let prevStatus='',prevAEB=false;
+  onValue(ref(db,'telemetry'),snap=>{
+    const d=snap.val();if(!d)return;
+    document.getElementById('connDot').classList.add('live');
+    document.getElementById('connLabel').textContent='Connected';
+    const status=d.status||"Safe";
+    document.getElementById('statStatus').textContent=status;
+    document.getElementById('statStatus').style.color=status.includes("FAULT")?'var(--red)':status==="Safe"?'var(--green)':'var(--amber)';
+    if(status!==prevStatus){addLog('Status: '+status,status==='Safe'?'ok':status==='Object Detected'?'warn':'danger');prevStatus=status;}
+    document.getElementById('statHealth').textContent=d.front_dead?"FRONT FAULT":"Healthy";
+    document.getElementById('statHealth').style.color=d.front_dead?"var(--red)":"var(--blue)";
+    document.getElementById('statSpeed').textContent=d.current_speed+"%";
+    const fd=d.front_distance||0,bd=d.back_distance||0,rd=d.right_distance||0;
+    document.getElementById('frontVal').textContent=fd;
+    document.getElementById('backVal').textContent=bd;
+    document.getElementById('rightVal').textContent=rd;
+    document.getElementById('boxFront').className='dist-box '+(fd>0&&fd<20?'close':fd>0&&fd<40?'near':'');
+    document.getElementById('boxBack').className='dist-box '+(bd>0&&bd<20?'close':bd>0&&bd<40?'near':'');
+    document.getElementById('boxRight').className='dist-box '+(rd>0&&rd<20?'close':rd>0&&rd<40?'near':'');
+    document.getElementById('leftRpmVal').textContent=d.left_rpm||0;
+    document.getElementById('rightRpmVal').textContent=d.right_rpm||0;
+    const cx=d.slam_x||0,cy=d.slam_y||0,ct=d.slam_theta||0;
+    document.getElementById('statHeading').textContent=Math.round(ct*(180/Math.PI)%360)+"°";
+    const lp=carPath[carPath.length-1];
+    if(!lp||Math.abs(lp.x-cx)>1||Math.abs(lp.y-cy)>1){carPath.push({x:cx,y:cy,theta:ct});if(carPath.length>500)carPath.shift();}
+    if(fd>0&&fd<200)wallPoints.push({x:cx+fd*Math.cos(ct),y:cy+fd*Math.sin(ct)});
+    if(rd>0&&rd<200)wallPoints.push({x:cx+rd*Math.cos(ct-Math.PI/2),y:cy+rd*Math.sin(ct-Math.PI/2)});
+    if(wallPoints.length>300)wallPoints.splice(0,wallPoints.length-300);
+    drawSLAM();
+    if(fd>0&&fd<15&&!d.front_dead){if(!prevAEB){addLog('⚠️ AEB TRIGGERED — obstacle at '+fd+'cm','danger');prevAEB=true;}}else{prevAEB=false;}
+  },err=>addLog('Firebase error: '+err.message,'danger'));
+
+  window.setDirection=dir=>{
+    set(ref(db,'controls/direction'),dir);
+    addLog('Direction → '+dir,dir==='Stop'?'warn':'');
+    if(dir==='Park'){
+      document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelector('.mode-btn[onclick="setDirection(\'Park\')"]').classList.add('active');
+    }
+  };
+  window.setSpeed=val=>{document.getElementById('speedLabel').textContent=val+'%';set(ref(db,'controls/max_speed'),Number(val));};
+  window.setMode=m=>{
+    set(ref(db,'controls/mode'),m);
+    addLog('Mode → '+m,m==='Autonomous'?'warn':'ok');
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+    const btn=[...document.querySelectorAll('.mode-btn')].find(b=>b.textContent.trim()===m);
+    if(btn)btn.classList.add('active');
+  };
+
+  const voiceRef=ref(db,'voice');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    document.getElementById('voiceCardBody').innerHTML='<div style="padding:12px;color:var(--amber);font-size:13px;">⚠️ Voice control requires Chrome browser.</div>';
+  } else {
+    const recognition=new SR();
+    recognition.continuous=false;recognition.interimResults=true;recognition.lang='en-US';
+    let isListening=false;
+
+    function detectIntent(text){
+      text=text.toLowerCase().trim();
+      if(/\b(back|reverse|behind|backward|go back)\b/.test(text))return{cmd:'Reverse',display:'Reverse ▼',type:'ok'};
+      if(/\b(forward|ahead|move|drive|start|go forward|go ahead)\b/.test(text))return{cmd:'Forward',display:'Forward ▲',type:'ok'};
+      if(/^go$/.test(text))return{cmd:'Forward',display:'Forward ▲',type:'ok'};
+      if(/\b(left)\b/.test(text))return{cmd:'Left',display:'Left ◀',type:'ok'};
+      if(/\b(right)\b/.test(text))return{cmd:'Right',display:'Right ▶',type:'ok'};
+      if(/\b(stop|halt|freeze|pause|brake)\b/.test(text))return{cmd:'Stop',display:'Stop ⏹',type:'stop'};
+      if(/\b(faster|speed up|accelerate)\b/.test(text))return{cmd:'SpeedUp',display:'Speed Up ⚡',type:'ok'};
+      if(/\b(slower|slow down|decelerate)\b/.test(text))return{cmd:'SlowDown',display:'Slow Down 🐢',type:'ok'};
+      if(/\b(park|parking|auto.?park)\b/.test(text))return{cmd:'Park',display:'Auto-Park 🅿️',type:'ok'};
+      if(/\b(autonomous|auto|self.?driv)\b/.test(text))return{cmd:'Autonomous',display:'Autonomous 🤖',type:'ok'};
+      if(/\b(manual|manu)\b/.test(text))return{cmd:'Manual',display:'Manual 🎮',type:'ok'};
+      if(/\b(how far|distance|ahead|front sensor|obstacle)\b/.test(text))return{cmd:'FrontDistance',display:'Front Distance 📡',type:'ok'};
+      if(/\b(battery|charge|power)\b/.test(text))return{cmd:'Battery',display:'Battery 🔋',type:'ok'};
+      if(/\b(speed|how fast|velocity)\b/.test(text))return{cmd:'Speed',display:'Speed ⚡',type:'ok'};
+      if(/\b(status|condition|state|how are you)\b/.test(text))return{cmd:'Status',display:'Status 🛡️',type:'ok'};
+      return{cmd:'Unknown',display:'Not recognized',type:'unknown'};
+    }
+
+    function execVoice(intent,transcript){
+      set(voiceRef,{transcript,command:intent.cmd,timestamp:Date.now()});
+      if(['Forward','Reverse','Left','Right','Stop','Park'].includes(intent.cmd))setDirection(intent.cmd);
+      else if(intent.cmd==='SpeedUp'){const s=document.querySelector('input[type=range]');setSpeed(Math.min(100,parseInt(s.value)+20));s.value=Math.min(100,parseInt(s.value)+20);}
+      else if(intent.cmd==='SlowDown'){const s=document.querySelector('input[type=range]');setSpeed(Math.max(0,parseInt(s.value)-20));s.value=Math.max(0,parseInt(s.value)-20);}
+      else if(intent.cmd==='Autonomous')setMode('Autonomous');
+      else if(intent.cmd==='Manual')setMode('Manual');
+      const el=document.getElementById('voiceCommand');
+      el.textContent=intent.display;el.className=`voice-result-cmd ${intent.type}`;
+      addLog(`🎙️ "${transcript}" → ${intent.cmd}`,intent.type==='unknown'?'warn':'ok');
+      document.getElementById('voiceStatusBadge').textContent=intent.cmd==='Unknown'?'Not recognized':'Command sent!';
+      setTimeout(()=>document.getElementById('voiceStatusBadge').textContent='Ready',2000);
+    }
+
+    recognition.onstart=()=>{
+      isListening=true;
+      document.getElementById('micBtn').classList.add('listening');document.getElementById('micBtn').textContent='⏹';
+      document.getElementById('micHint').textContent='Listening… speak now';
+      document.getElementById('voiceStatusBadge').textContent='Listening…';
+      document.getElementById('voiceTranscript').textContent='…';
+    };
+    recognition.onresult=event=>{
+      let interim='',final='';
+      for(let i=event.resultIndex;i<event.results.length;i++){
+        const t=event.results[i][0].transcript;
+        if(event.results[i].isFinal)final+=t;else interim+=t;
+      }
+      document.getElementById('voiceTranscript').textContent=final||interim||'…';
+      if(final){const intent=detectIntent(final);execVoice(intent,final);}
+    };
+    recognition.onerror=event=>{addLog(`🎙️ Voice error: ${event.error}`,'danger');document.getElementById('voiceStatusBadge').textContent='Error — try again';resetMic();};
+    recognition.onend=()=>{isListening=false;resetMic();};
+
+    function resetMic(){
+      isListening=false;
+      document.getElementById('micBtn').classList.remove('listening');document.getElementById('micBtn').textContent='🎙️';
+      document.getElementById('micHint').textContent='Tap to speak a command';document.getElementById('voiceStatusBadge').textContent='Ready';
+    }
+
+    window.toggleListening=()=>{
+      if(isListening)recognition.stop();
+      else{document.getElementById('voiceTranscript').textContent='…';document.getElementById('voiceCommand').textContent='—';document.getElementById('voiceCommand').className='voice-result-cmd';recognition.start();}
+    };
+    window.askCar=(cmd,label)=>{execVoice({cmd,display:label,type:'ok'},label);addLog('🎙️ Query: '+label,'ok');};
+
+    const synth=window.speechSynthesis;
+    function speakResponse(text){
+      if(!synth)return;synth.cancel();
+      setTimeout(()=>{
+        const u=new SpeechSynthesisUtterance(text);u.rate=0.95;u.pitch=1.0;u.volume=1.0;u.lang='en-US';
+        if(synth.paused)synth.resume();
+        document.getElementById('speakingDot').style.display='block';
+        u.onend=()=>document.getElementById('speakingDot').style.display='none';
+        const w=setInterval(()=>{if(synth.speaking){synth.pause();synth.resume();}else clearInterval(w);},5000);
+        synth.speak(u);
+      },150);
+    }
+
+    const loadTime=Date.now();let lastRespTs=0;
+    onValue(ref(db,'voice/response_ts'),snap=>{
+      const ts=snap.val();if(!ts||ts<=lastRespTs||ts<loadTime)return;lastRespTs=ts;
+      import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js').then(({get})=>{
+        get(ref(db,'voice/response')).then(snap=>{
+          const text=snap.val();
+          if(text){document.getElementById('voiceResponse').textContent=text;document.getElementById('voiceResponseBox').style.display='block';speakResponse(text);}
+        });
+      });
+    });
+    addLog('🎙️ Voice control ready — tap the mic button to speak','ok');
+  }
+
+  window.setTheme=theme=>{
+    document.body.classList.toggle('dark',theme==='dark');
+    document.getElementById('optLight').classList.toggle('active',theme==='light');
+    document.getElementById('optDark').classList.toggle('active',theme==='dark');
+    localStorage.setItem('carTheme',theme);
+  };
+  const saved=localStorage.getItem('carTheme');if(saved==='dark')setTheme('dark');
+  addLog('Dashboard ready. Connecting to Firebase…','ok');
+</script>
+</body>
+</html>

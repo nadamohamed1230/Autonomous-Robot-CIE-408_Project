@@ -17,6 +17,10 @@ static void (*UART_Callback)(u8) = 0;
 
 void UART_RX_Init(void)
 {
+    /* --- ADD THIS LINE --- */
+    SET_BIT(TRISC, 7);             /* Set RC7 (RX) as Input so it can "hear" */
+    /* --------------------- */
+
     SET_BIT(TXSTA, BRGH_BIT);      /* High-speed baud rate */
     SPBRG = UART_SPBRG_VALUE;      /* Baud rate register   */
     CLR_BIT(TXSTA, SYNC_BIT);      /* Asynchronous mode    */
@@ -29,13 +33,16 @@ void UART_RX_Init(void)
 
 void UART_TX_Init(void)
 {
+    /* --- ADD THIS LINE --- */
+    SET_BIT(TRISC, 6);             /* Set RC6 (TX) as Input (Hardware overrides to Output) */
+    /* --------------------- */
+
     SET_BIT(TXSTA, BRGH_BIT);      /* High-speed baud rate */
     SPBRG = UART_SPBRG_VALUE;      /* Baud rate register   */
     CLR_BIT(TXSTA, SYNC_BIT);      /* Asynchronous mode    */
     SET_BIT(RCSTA, SPEN_BIT);      /* Enable serial port   */
     SET_BIT(TXSTA, TXEN_BIT);      /* Enable transmitter   */
 }
-
 void UART_Write(u8 Data)
 {
     while (!GET_BIT(TXSTA, TRMT_BIT));  /* Wait until TX shift register empty */
@@ -67,5 +74,17 @@ void UART_ISR(void)
     if (UART_Callback != 0)
     {
         UART_Callback(received);
+    }
+}
+/* 
+ * Paste this at the bottom of USART.c 
+ */
+void UART_SendString(char *str)
+{
+    /* Loop through the string until it hits the null-terminator '\0' */
+    while (*str != '\0')
+    {
+        UART_Write((u8)*str); /* Send one character */
+        str++;                /* Move to the next character in the string */
     }
 }

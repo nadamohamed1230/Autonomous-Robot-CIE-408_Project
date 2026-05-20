@@ -10,6 +10,7 @@
 #include "LCD_I2C.h"
 #include "../../MCAL/I2C/I2C_interface.h"
 #include "../../SERVICES/System.h"
+#include "../../MCAL/I2C/I2C_config.h"
 
 static u8 backlight_state = 0x08;   /* Bit 3 high = backlight ON */
 
@@ -19,12 +20,12 @@ static void LCD_I2C_WriteNibble(u8 data_nibble, u8 rs_mode)
     u8 i2c_data = data_nibble | backlight_state | rs_mode;
 
     I2C_Start();
-    I2C_WriteByte(LCD_I2C_ADDRESS);
+    I2C_Write(LCD_I2C_ADDRESS);
 
-    I2C_WriteByte(i2c_data | 0x04);    /* EN = 1 */
+    I2C_Write(i2c_data | 0x04);    /* EN = 1 */
     Delay_ms(1);
 
-    I2C_WriteByte(i2c_data & ~0x04);   /* EN = 0 */
+    I2C_Write(i2c_data & ~0x04);   /* EN = 0 */
     Delay_ms(1);
 
     I2C_Stop();
@@ -44,7 +45,8 @@ void LCD_SendData(u8 char_data)
 
 void LCD_Init(void)
 {
-    I2C_Init();
+    /* Initializes the I2C bus at 100kHz */
+    I2C_Init(I2C_MASTER_BAUD_RATE);
     Delay_ms(50);                       /* Wait for LCD power-up          */
 
     /* HD44780 4-bit initialisation sequence */

@@ -10,5 +10,6 @@ u8   UART_Read(void);
 u8   UART_TX_Empty(void);
 void UART_SetCallback(void (*Callback)(u8));
 void UART_ISR(void);
+void UART_SendString(char *str);
 
 #endif

@@ -1,74 +1,116 @@
 /*
  * I2C.c - MPLAB XC8 Compatible
- *
- * Uses XC8's <xc.h> SFR names: SSPCON, SSPCON2, SSPSTAT, SSPBUF, SSPADD, TRISC.
+ * 
+ * Master Mode I2C Driver for PIC16F877A
+ * Includes hardware polling (I2C_Wait) to prevent SSPBUF collisions.
  */
 
 #include <xc.h>
+#include "../../SERVICES/STD_TYPES.h"
+#include "../../SERVICES/System.h" /* For _XTAL_FREQ */
 #include "I2C_interface.h"
 #include "I2C_config.h"
 #include "I2C_private.h"
-#include "../../SERVICES/Bit_Math.h"
 
-void I2C_Init(void)
+/* =========================================================
+   Wait Function (The Traffic Controller)
+   Halts the processor until the I2C bus is completely idle.
+   ========================================================= */
+void I2C_Wait(void)
 {
-    /* SDA (RC4) and SCL (RC3) must be inputs before enabling MSSP */
-    TRISC |= (1 << SDA_BIT) | (1 << SCL_BIT);
-
-    /* I2C Master mode (0b1000), SSPEN enabled */
-    SSPCON  = (1 << SSPEN_BIT) | 0x08;
-    SSPADD  = (u8)I2C_BRG_VALUE;
-
-    /* Standard speed, sample at middle of output */
-    SSPSTAT &= ~(1 << 7);
+    /* 
+     * SSPSTATbits.R_nW : Transmit in progress flag
+     * SSPCON2 & 0x1F   : Start, Stop, Repeated Start, Receive, and Acknowledge flags
+     * Loop runs until ALL of these hardware flags drop to 0.
+     */
+    while ((SSPCON2 & 0x1F) || (SSPSTATbits.R_nW));
 }
 
+/* =========================================================
+   Initialization
+   ========================================================= */
+void I2C_Init(const unsigned long baud_rate)
+{
+    /* Set SDA (RC4) and SCL (RC3) as input pins to let the pull-up resistors work */
+    TRISCbits.TRISC3 = 1;
+    TRISCbits.TRISC4 = 1;
+
+    /* 
+     * SSPCON: 
+     * SSPEN = 1 (Enable MSSP)
+     * SSPM = 1000 (I2C Master mode, clock = FOSC / (4 * (SSPADD+1)))
+     */
+    SSPCON = 0x28; 
+
+    /* SSPCON2: Clear all bits */
+    SSPCON2 = 0x00;
+
+    /* SSPSTAT: Slew rate control disabled for Standard Speed (100kHz and 1MHz) */
+    SSPSTAT = 0x80;
+
+    /* Calculate baud rate dynamically based on _XTAL_FREQ from System.h */
+    SSPADD = (unsigned char)((_XTAL_FREQ / (4 * baud_rate)) - 1);
+}
+
+/* =========================================================
+   Start Condition
+   ========================================================= */
 void I2C_Start(void)
 {
-    SET_BIT(SSPCON2, SEN_BIT);
-    while (GET_BIT(SSPCON2, SEN_BIT));
+    I2C_Wait();         /* Wait for bus to be free */
+    SSPCON2bits.SEN = 1; /* Initiate Start condition on SDA and SCL pins */
 }
 
-void I2C_ReStart(void)
-{
-    SET_BIT(SSPCON2, RSEN_BIT);
-    while (GET_BIT(SSPCON2, RSEN_BIT));
-}
-
+/* =========================================================
+   Stop Condition
+   ========================================================= */
 void I2C_Stop(void)
 {
-    SET_BIT(SSPCON2, PEN_BIT);
-    while (GET_BIT(SSPCON2, PEN_BIT));
+    I2C_Wait();         /* Wait for bus to be free */
+    SSPCON2bits.PEN = 1; /* Initiate Stop condition on SDA and SCL pins */
 }
 
-u8 I2C_WriteByte(u8 tx_byte)
+/* =========================================================
+   Repeated Start Condition (Useful for reading)
+   ========================================================= */
+void I2C_RepeatedStart(void)
 {
-    SSPBUF = tx_byte;
-    while (GET_BIT(SSPSTAT, BF_BIT));
-    /* Wait until no control bits are active */
-    while (SSPCON2 & ((1 << SEN_BIT)  | (1 << RSEN_BIT) |
-                      (1 << PEN_BIT)  | (1 << RCEN_BIT) |
-                      (1 << ACKEN_BIT)));
-    return GET_BIT(SSPCON2, ACKSTAT_BIT);   /* 0 = ACK received */
+    I2C_Wait();          /* Wait for bus to be free */
+    SSPCON2bits.RSEN = 1; /* Initiate Repeated Start condition */
 }
 
-u8 I2C_ReadByte(void)
+/* =========================================================
+   Write Data Byte
+   ========================================================= */
+void I2C_Write(unsigned char data)
 {
-    SET_BIT(SSPCON2, RCEN_BIT);
-    while (!GET_BIT(SSPSTAT, BF_BIT));
-    return SSPBUF;
+    I2C_Wait();             /* Wait for bus to be free */
+    SSPBUF = data;          /* Load data into transmit buffer */
+    
+    /* Wait specifically for the transmission to finish */
+    while(!PIR1bits.SSPIF); 
+    
+    PIR1bits.SSPIF = 0;     /* Clear the interrupt flag manually */
 }
 
-void I2C_SendAck(void)
+/* =========================================================
+   Read Data Byte
+   ========================================================= */
+unsigned char I2C_Read(unsigned char ack)
 {
-    CLR_BIT(SSPCON2, ACKDT_BIT);
-    SET_BIT(SSPCON2, ACKEN_BIT);
-    while (GET_BIT(SSPCON2, ACKEN_BIT));
-}
+    unsigned char temp;
 
-void I2C_SendNack(void)
-{
-    SET_BIT(SSPCON2, ACKDT_BIT);
-    SET_BIT(SSPCON2, ACKEN_BIT);
-    while (GET_BIT(SSPCON2, ACKEN_BIT));
+    I2C_Wait();
+    SSPCON2bits.RCEN = 1;   /* Enable Receive mode */
+    
+    /* Wait for buffer to fill with received data */
+    while(!SSPSTATbits.BF);      
+    temp = SSPBUF;          /* Read the data */
+
+    I2C_Wait();
+    /* Send Acknowledge (0 = ACK, 1 = NACK) */
+    SSPCON2bits.ACKDT = (ack) ? 0 : 1; 
+    SSPCON2bits.ACKEN = 1;  /* Initiate Acknowledge sequence */
+
+    return temp;
 }

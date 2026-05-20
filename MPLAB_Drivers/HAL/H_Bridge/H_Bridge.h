@@ -4,11 +4,11 @@
 #include "../../SERVICES/STD_TYPES.h"
 
 void H_Bridge_Init(void);
-void H_Bridge_SetSpeed(u8 duty_cycle);
-void H_Bridge_Forward(void);
-void H_Bridge_Reverse(void);
-void H_Bridge_TurnRight(void);
-void H_Bridge_TurnLeft(void);
-void H_Bridge_Stop(void);
+void H_Bridge_Forward(u8 speed);
+void H_Bridge_Reverse(u8 speed);
+void H_Bridge_TurnLeft(u8 speed);
+void H_Bridge_TurnRight(u8 speed);
+void H_Bridge_Stop(void); /* Stop stays as void because speed is 0 */
+void H_Bridge_CutMotors(void);
 
 #endif
