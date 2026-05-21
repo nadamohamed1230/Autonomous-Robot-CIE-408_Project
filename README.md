@@ -7,7 +7,8 @@
 
 > An enterprise-grade, dual-processor autonomous robotics platform featuring AI-driven obstacle avoidance, deterministic finite state machine (FSM) parallel parking, live 2D SLAM, and a fault-tolerant hardware safety layer.
 
-![Autonomous Car Project](https://via.placeholder.com/1000x400?text=Upload+Your+Project+Photo+Here+And+Replace+This+Link)
+<img width="1280" height="960" alt="WhatsApp Image 2026-05-21 at 7 10 01 PM" src="https://github.com/user-attachments/assets/cabf546e-0782-4257-a3ea-6be0abb12b22" />
+<img width="1280" height="960" alt="WhatsApp Image 2026-05-21 at 7 10 03 PM" src="https://github.com/user-attachments/assets/7fce23da-6bd5-4668-a535-8f8158160a0b" />
 
 Developed as the capstone project for **CIE 408: Embedded Systems** at **Zewail City of Science and Technology**.
 
@@ -19,9 +20,9 @@ Developed as the capstone project for **CIE 408: Embedded Systems** at **Zewail 
 - [Machine Learning Subsystems](#-machine-learning-subsystems)
 - [Hardware Stack](#-hardware-stack)
 - [Software Stack](#-software-stack)
+-  [Team & Acknowledgments](#-team--acknowledgments)
 - [Installation & Setup](#-installation--setup)
-- [Usage & Dashboard](#-usage--dashboard)
-- [Team & Acknowledgments](#-team--acknowledgments)
+
 
 ---
 
@@ -78,6 +79,24 @@ This platform replaces hardcoded "if/then" driving logic with trained machine le
 
 ---
 
+## Team & Acknowledgments
+Project Lead:
+
+Nada Mohamed — System Architecture, Cloud Integration, & ML Pipelines
+
+Core Engineering Team:
+
+Ashar Salama — AEB Systems & Motor Driver Development
+
+Reem Tamer — Traction Control & PID Systems
+
+Malak Osama — Communication Links & UART Protocols
+
+Alya Marwan — Python Logic & Navigation FSM
+
+Academic Advisor:
+
+Dr. Hazem Fahmy — CIE 408 Course Instructor
 ## Installation & Setup
 
 ### 1. Clone the Repository
